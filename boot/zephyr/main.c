@@ -46,6 +46,7 @@
 #include "bootutil/bootutil.h"
 #include "bootutil/boot_hooks.h"
 #include "bootutil/fault_injection_hardening.h"
+#include "bootutil/boot_measure.h"
 #include "bootutil/mcuboot_status.h"
 #include "flash_map_backend/flash_map_backend.h"
 
@@ -526,6 +527,9 @@ int main(void)
 #endif
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
+    BOOT_MEASURE_INIT();
+    BOOT_MEASURE_START(BOOT_MEASURE_TOTAL);
+
     MCUBOOT_WATCHDOG_SETUP();
     MCUBOOT_WATCHDOG_FEED();
 
@@ -629,6 +633,8 @@ int main(void)
     if (FIH_EQ(fih_rc, FIH_BOOT_HOOK_REGULAR)) {
         FIH_CALL(boot_go, fih_rc, &rsp);
     }
+    BOOT_MEASURE_STOP(BOOT_MEASURE_TOTAL);
+    BOOT_MEASURE_REPORT();
     BOOT_LOG_DBG("Left boot_go with success == %d", FIH_EQ(fih_rc, FIH_SUCCESS) ? 1 : 0);
 
 #ifdef CONFIG_BOOT_SERIAL_BOOT_MODE

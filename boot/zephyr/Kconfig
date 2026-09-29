@@ -1091,6 +1091,16 @@ endmenu
 
 rsource "Kconfig.serial_recovery"
 
+config BOOT_MEASURE_TIMING
+	bool "Measure boot stage timing with the DWT cycle counter"
+	depends on CPU_CORTEX_M_HAS_DWT
+	help
+	  Count CPU cycles spent in the bootloader main(), image validation,
+	  image hashing and signature verification, and record why the last
+	  validation failed (hash mismatch, no matching key, bad signature).
+	  The results are printed once, right before jumping to the
+	  application or giving up. When disabled, no code is added.
+
 config MCUBOOT_INDICATION_LED
 	bool "Turns on LED indication when device is in DFU"
 	select GPIO

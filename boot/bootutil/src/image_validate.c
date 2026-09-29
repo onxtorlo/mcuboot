@@ -41,6 +41,7 @@
 #include "bootutil/sign_key.h"
 #include "bootutil/security_cnt.h"
 #include "bootutil/fault_injection_hardening.h"
+#include "bootutil/boot_measure.h"
 
 #include "mcuboot_config/mcuboot_config.h"
 #include "bootutil/bootutil_log.h"
@@ -255,8 +256,13 @@ bootutil_img_validate(struct boot_loader_state *state,
 
     BOOT_LOG_DBG("bootutil_img_validate: flash area %p", fap);
 
+    BOOT_MEASURE_START(BOOT_MEASURE_VALIDATE);
+    BOOT_MEASURE_SET_RESULT(BOOT_MEASURE_RES_NONE);
+
 #if defined(EXPECTED_HASH_TLV) && !defined(MCUBOOT_SIGN_PURE)
+    BOOT_MEASURE_START(BOOT_MEASURE_HASH);
     rc = bootutil_img_hash(state, hdr, fap, tmp_buf, tmp_buf_sz, hash, seed, seed_len);
+    BOOT_MEASURE_STOP(BOOT_MEASURE_HASH);
     if (rc) {
         goto out;
     }
@@ -353,6 +359,7 @@ bootutil_img_validate(struct boot_loader_state *state,
 
             FIH_CALL(boot_fih_memequal, fih_rc, hash, buf, sizeof(hash));
             if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
+                BOOT_MEASURE_SET_RESULT(BOOT_MEASURE_RES_HASH_MISMATCH);
                 FIH_SET(fih_rc, FIH_FAILURE);
                 goto out;
             }
@@ -398,6 +405,7 @@ bootutil_img_validate(struct boot_loader_state *state,
             BOOT_LOG_DBG("bootutil_img_validate: EXPECTED_SIG_TLV == %d", EXPECTED_SIG_TLV);
             /* Ignore this signature if it is out of bounds. */
             if (key_id < 0 || key_id >= bootutil_key_cnt) {
+                BOOT_MEASURE_SET_RESULT(BOOT_MEASURE_RES_NO_KEY);
                 key_id = -1;
                 continue;
             }
@@ -409,6 +417,7 @@ bootutil_img_validate(struct boot_loader_state *state,
             if (rc) {
                 goto out;
             }
+            BOOT_MEASURE_START(BOOT_MEASURE_SIG);
 #ifndef MCUBOOT_SIGN_PURE
             FIH_CALL(bootutil_verify_sig, valid_signature, hash, sizeof(hash),
                                                            buf, len, key_id);
@@ -430,6 +439,9 @@ bootutil_img_validate(struct boot_loader_state *state,
                      hdr->ih_hdr_size + hdr->ih_img_size + hdr->ih_protect_tlv_size,
                      buf, len, key_id);
 #endif
+            BOOT_MEASURE_STOP(BOOT_MEASURE_SIG);
+            BOOT_MEASURE_SET_RESULT(FIH_EQ(valid_signature, FIH_SUCCESS) ?
+                                    BOOT_MEASURE_RES_OK : BOOT_MEASURE_RES_BAD_SIG);
             key_id = -1;
             break;
         }
@@ -586,6 +598,9 @@ out:
     if (rc) {
         FIH_SET(fih_rc, FIH_FAILURE);
     }
+
+    BOOT_MEASURE_VALIDATE_DONE(FIH_EQ(fih_rc, FIH_SUCCESS));
+    BOOT_MEASURE_STOP(BOOT_MEASURE_VALIDATE);
 
     FIH_RET(fih_rc);
 }
