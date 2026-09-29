@@ -84,4 +84,16 @@ void boot_measure_report(void)
                      stages[i].sum, stages[i].last / cycles_per_us);
     }
     BOOT_LOG_INF("MEAS result=%s", result_names[last_result]);
+
+#if defined(CONFIG_INIT_STACKS) && defined(CONFIG_THREAD_STACK_INFO)
+    /* Peak use of the main thread stack so far (stack painted at thread creation) */
+    size_t unused;
+
+    if (k_thread_stack_space_get(k_current_get(), &unused) == 0) {
+        size_t size = k_current_get()->stack_info.size;
+
+        BOOT_LOG_INF("MEAS stack size=%u used=%u", (unsigned int)size,
+                     (unsigned int)(size - unused));
+    }
+#endif
 }

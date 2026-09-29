@@ -1100,6 +1100,8 @@ config BOOT_MEASURE_TIMING
 	  validation failed (hash mismatch, no matching key, bad signature).
 	  The results are printed once, right before jumping to the
 	  application or giving up. When disabled, no code is added.
+	  With INIT_STACKS and THREAD_STACK_INFO also enabled, the peak
+	  main thread stack use is printed as well.
 
 config MCUBOOT_INDICATION_LED
 	bool "Turns on LED indication when device is in DFU"
