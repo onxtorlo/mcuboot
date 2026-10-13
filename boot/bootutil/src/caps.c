@@ -41,6 +41,9 @@ uint32_t bootutil_get_caps(void)
 #if defined(MCUBOOT_SIGN_ED25519)
     res |= BOOTUTIL_CAP_ED25519;
 #endif
+#if defined(MCUBOOT_SIGN_MLDSA)
+    res |= BOOTUTIL_CAP_MLDSA;
+#endif
 #if defined(MCUBOOT_OVERWRITE_ONLY)
     res |= BOOTUTIL_CAP_OVERWRITE_UPGRADE;
 #elif defined(MCUBOOT_SWAP_USING_MOVE)

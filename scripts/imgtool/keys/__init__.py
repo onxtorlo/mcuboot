@@ -31,6 +31,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X
 
 from .ecdsa import ECDSA256P1, ECDSA384P1, ECDSA256P1Public, ECDSA384P1Public, ECDSAUsageError
 from .ed25519 import Ed25519, Ed25519Public, Ed25519UsageError
+from .mldsa import MLDSA, MLDSA_PRIVATE_TYPES, MLDSA_PUBLIC_TYPES, MLDSAPublic, MLDSAUsageError
 from .rsa import RSA, RSA_KEY_SIZES, RSAPublic, RSAUsageError
 from .x25519 import X25519, X25519Public, X25519UsageError
 
@@ -43,6 +44,9 @@ __all__ = [
     "Ed25519",
     "Ed25519Public",
     "Ed25519UsageError",
+    "MLDSA",
+    "MLDSAPublic",
+    "MLDSAUsageError",
     "RSA",
     "RSA_KEY_SIZES",
     "RSAPublic",
@@ -112,6 +116,10 @@ def load(path, passwd=None):
         return Ed25519(pk)
     elif isinstance(pk, Ed25519PublicKey):
         return Ed25519Public(pk)
+    elif isinstance(pk, MLDSA_PRIVATE_TYPES):
+        return MLDSA(pk)
+    elif isinstance(pk, MLDSA_PUBLIC_TYPES):
+        return MLDSAPublic(pk)
     elif isinstance(pk, X25519PrivateKey):
         return X25519(pk)
     elif isinstance(pk, X25519PublicKey):

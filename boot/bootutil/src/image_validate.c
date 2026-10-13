@@ -65,7 +65,8 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #if (defined(MCUBOOT_SIGN_RSA)      + \
      defined(MCUBOOT_SIGN_EC256)    + \
      defined(MCUBOOT_SIGN_EC384)    + \
-     defined(MCUBOOT_SIGN_ED25519)) > 1
+     defined(MCUBOOT_SIGN_ED25519)  + \
+     defined(MCUBOOT_SIGN_MLDSA)) > 1
 #error "Only a single signature type is supported!"
 #endif
 
@@ -88,6 +89,21 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #elif defined(MCUBOOT_SIGN_ED25519)
 #    define EXPECTED_SIG_TLV IMAGE_TLV_ED25519
 #    define SIG_BUF_SIZE 64
+#    define EXPECTED_SIG_LEN(x) ((x) == SIG_BUF_SIZE)
+#elif defined(MCUBOOT_SIGN_MLDSA)
+/* Signature sizes from FIPS 204, Table 2 */
+#    if MCUBOOT_SIGN_MLDSA_LEVEL == 44
+#        define EXPECTED_SIG_TLV IMAGE_TLV_MLDSA44
+#        define SIG_BUF_SIZE 2420
+#    elif MCUBOOT_SIGN_MLDSA_LEVEL == 65
+#        define EXPECTED_SIG_TLV IMAGE_TLV_MLDSA65
+#        define SIG_BUF_SIZE 3309
+#    elif MCUBOOT_SIGN_MLDSA_LEVEL == 87
+#        define EXPECTED_SIG_TLV IMAGE_TLV_MLDSA87
+#        define SIG_BUF_SIZE 4627
+#    else
+#        error "Unsupported ML-DSA parameter set (must be 44, 65 or 87)"
+#    endif
 #    define EXPECTED_SIG_LEN(x) ((x) == SIG_BUF_SIZE)
 #else
 #    define SIG_BUF_SIZE 32 /* no signing, sha256 digest only */
@@ -178,6 +194,9 @@ static const uint16_t allowed_unprot_tlvs[] = {
      IMAGE_TLV_ECDSA_SIG,
      IMAGE_TLV_RSA3072_PSS,
      IMAGE_TLV_ED25519,
+     IMAGE_TLV_MLDSA44,
+     IMAGE_TLV_MLDSA65,
+     IMAGE_TLV_MLDSA87,
 #if defined(MCUBOOT_SIGN_PURE)
      IMAGE_TLV_SIG_PURE,
 #endif

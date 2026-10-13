@@ -424,6 +424,51 @@ config BOOT_KEY_IMPORT_BYPASS_ASN
 	  the ASN.1 processing.
 endif
 
+config BOOT_SIGNATURE_TYPE_MLDSA
+	bool "ML-DSA (FIPS 204) post-quantum signatures"
+	depends on ZEPHYR_MLDSA_NATIVE_MODULE
+	select BOOT_USE_TINYCRYPT
+	select BOOT_IMG_HASH_ALG_SHA256_ALLOW
+	select BOOT_IMG_HASH_ALG_SHA512_ALLOW
+	help
+	  ML-DSA signature over the image hash (SHA-256 or SHA-512), verified
+	  with mldsa-native (portable C). TinyCrypt computes the image hash.
+	  The public key is embedded raw (FIPS 204 pkEncode). Verification
+	  needs a large stack: set MAIN_STACK_SIZE accordingly (the build
+	  fails if it is too small).
+
+if BOOT_SIGNATURE_TYPE_MLDSA
+
+choice BOOT_SIGNATURE_TYPE_MLDSA_PARAMS
+	prompt "ML-DSA parameter set"
+	default BOOT_SIGNATURE_TYPE_MLDSA_65
+
+config BOOT_SIGNATURE_TYPE_MLDSA_44
+	bool "ML-DSA-44 (NIST security category 2)"
+
+config BOOT_SIGNATURE_TYPE_MLDSA_65
+	bool "ML-DSA-65 (NIST security category 3)"
+
+config BOOT_SIGNATURE_TYPE_MLDSA_87
+	bool "ML-DSA-87 (NIST security category 5)"
+
+endchoice
+
+config BOOT_SIGNATURE_TYPE_MLDSA_LEVEL
+	int
+	default 44 if BOOT_SIGNATURE_TYPE_MLDSA_44
+	default 65 if BOOT_SIGNATURE_TYPE_MLDSA_65
+	default 87 if BOOT_SIGNATURE_TYPE_MLDSA_87
+
+config BOOT_MLDSA_REDUCE_RAM
+	bool "Reduce ML-DSA RAM use (slower)"
+	help
+	  Build mldsa-native with MLD_CONFIG_REDUCE_RAM (experimental in
+	  mldsa-native). Verification needs about 22/31/41 KB of stack for
+	  ML-DSA-44/65/87 instead of 39/63/100 KB, at some cost in speed.
+
+endif # BOOT_SIGNATURE_TYPE_MLDSA
+
 endchoice
 
 if BOOT_USE_PSA_CRYPTO

@@ -93,6 +93,7 @@ zephyr_sources(
   ${BOOT_DIR}/bootutil/src/image_rsa.c
   ${BOOT_DIR}/bootutil/src/image_ecdsa.c
   ${BOOT_DIR}/bootutil/src/image_ed25519.c
+  ${BOOT_DIR}/bootutil/src/image_mldsa.c
   ${BOOT_DIR}/bootutil/src/bootutil_misc.c
   ${BOOT_DIR}/bootutil/src/bootutil_area.c
   ${BOOT_DIR}/bootutil/src/bootutil_loader.c
@@ -224,6 +225,57 @@ elseif(CONFIG_BOOT_SIGNATURE_TYPE_RSA)
       PROPERTIES
         INCLUDE_DIRECTORIES ${ZEPHYR_MBEDTLS_MODULE_DIR}/library
     )
+  endif()
+elseif(CONFIG_BOOT_SIGNATURE_TYPE_MLDSA)
+  # Image hash with TinyCrypt, ML-DSA verification with mldsa-native
+  zephyr_include_directories(
+    ${BOOT_DIR}/zephyr/include
+    ${TINYCRYPT_DIR}/include
+    ${TINYCRYPT_SHA512_DIR}/include
+  )
+  zephyr_sources(
+    ${TINYCRYPT_DIR}/source/sha256.c
+    ${TINYCRYPT_DIR}/source/utils.c
+  )
+  if(CONFIG_BOOT_IMG_HASH_ALG_SHA512)
+    zephyr_sources(${TINYCRYPT_SHA512_DIR}/source/sha512.c)
+  endif()
+
+  set(MLDSA_DIR ${ZEPHYR_MLDSA_NATIVE_MODULE_DIR}/mldsa)
+  assert_exists(MLDSA_DIR)
+  zephyr_include_directories(${MLDSA_DIR})
+  zephyr_sources(${MLDSA_DIR}/mldsa_native.c)
+  # Verification only: no randombytes() needed
+  zephyr_compile_definitions(
+    MLD_CONFIG_PARAMETER_SET=${CONFIG_BOOT_SIGNATURE_TYPE_MLDSA_LEVEL}
+    MLD_CONFIG_NAMESPACE_PREFIX=mcuboot_mldsa
+    MLD_CONFIG_NO_RANDOMIZED_API
+    MLD_CONFIG_NO_SUPERCOP
+  )
+  if(CONFIG_BOOT_MLDSA_REDUCE_RAM)
+    zephyr_compile_definitions(MLD_CONFIG_REDUCE_RAM)
+  endif()
+
+  # Verification runs on the main stack: mldsa-native's documented peak
+  # (MLD_TOTAL_ALLOC_<level>_VERIFY) + the signature buffer in
+  # bootutil_img_validate() + 8 KB for MCUboot itself (measured: ~6 KB).
+  if(CONFIG_BOOT_MLDSA_REDUCE_RAM)
+    set(mldsa_verify_ram_44 22464)
+    set(mldsa_verify_ram_65 30720)
+    set(mldsa_verify_ram_87 41216)
+  else()
+    set(mldsa_verify_ram_44 38816)
+    set(mldsa_verify_ram_65 62432)
+    set(mldsa_verify_ram_87 99552)
+  endif()
+  set(mldsa_sig_44 2420)
+  set(mldsa_sig_65 3309)
+  set(mldsa_sig_87 4627)
+  set(lvl ${CONFIG_BOOT_SIGNATURE_TYPE_MLDSA_LEVEL})
+  math(EXPR mldsa_min_stack "${mldsa_verify_ram_${lvl}} + ${mldsa_sig_${lvl}} + 8192")
+  if(CONFIG_MAIN_STACK_SIZE LESS mldsa_min_stack)
+    message(FATAL_ERROR "ML-DSA-${lvl} verification needs CONFIG_MAIN_STACK_SIZE >= "
+                        "${mldsa_min_stack} (is ${CONFIG_MAIN_STACK_SIZE})")
   endif()
 elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519 OR CONFIG_BOOT_ENCRYPT_X25519)
   if(CONFIG_BOOT_USE_TINYCRYPT)
@@ -630,6 +682,15 @@ if(SYSBUILD)
       set(boot_tlv_estimate 150)
     elseif(CONFIG_BOOT_SIGNATURE_TYPE_ED25519)
       set(boot_tlv_estimate 144)
+    elseif(CONFIG_BOOT_SIGNATURE_TYPE_MLDSA)
+      # TLV info (4) + SHA TLV (4 + 64) + KEYHASH TLV (4 + 64) + signature TLV (4 + sig)
+      if(CONFIG_BOOT_SIGNATURE_TYPE_MLDSA_LEVEL EQUAL 87)
+        set(boot_tlv_estimate 4771)
+      elseif(CONFIG_BOOT_SIGNATURE_TYPE_MLDSA_LEVEL EQUAL 65)
+        set(boot_tlv_estimate 3453)
+      else()
+        set(boot_tlv_estimate 2564)
+      endif()
     else()
       set(boot_tlv_estimate 40)
     endif()

@@ -32,7 +32,13 @@ from imgtool import image, imgtool_version
 from imgtool.dumpinfo import dump_imginfo
 from imgtool.version import decode_version
 
-from .keys import ECDSAUsageError, Ed25519UsageError, RSAUsageError, X25519UsageError
+from .keys import (
+    ECDSAUsageError,
+    Ed25519UsageError,
+    MLDSAUsageError,
+    RSAUsageError,
+    X25519UsageError,
+)
 
 comp_default_dictsize=131072
 comp_default_pb=2
@@ -67,6 +73,18 @@ def gen_ed25519(keyfile, passwd):
     keys.Ed25519.generate().export_private(path=keyfile, passwd=passwd)
 
 
+def gen_mldsa44(keyfile, passwd):
+    keys.MLDSA.generate(44).export_private(path=keyfile, passwd=passwd)
+
+
+def gen_mldsa65(keyfile, passwd):
+    keys.MLDSA.generate(65).export_private(path=keyfile, passwd=passwd)
+
+
+def gen_mldsa87(keyfile, passwd):
+    keys.MLDSA.generate(87).export_private(path=keyfile, passwd=passwd)
+
+
 def gen_x25519(keyfile, passwd):
     keys.X25519.generate().export_private(path=keyfile, passwd=passwd)
 
@@ -80,6 +98,9 @@ keygens = {
     'ecdsa-p256': gen_ecdsa_p256,
     'ecdsa-p384': gen_ecdsa_p384,
     'ed25519':    gen_ed25519,
+    'ml-dsa-44':  gen_mldsa44,
+    'ml-dsa-65':  gen_mldsa65,
+    'ml-dsa-87':  gen_mldsa87,
     'x25519':     gen_x25519,
 }
 valid_formats = ['openssl', 'pkcs8']
@@ -216,7 +237,8 @@ def getpriv(key, minimal, format):
         print("Invalid passphrase")
     try:
         key.emit_private(minimal, format)
-    except (RSAUsageError, ECDSAUsageError, Ed25519UsageError, X25519UsageError) as e:
+    except (RSAUsageError, ECDSAUsageError, Ed25519UsageError, MLDSAUsageError,
+            X25519UsageError) as e:
         raise click.UsageError(e) from e
 
 
