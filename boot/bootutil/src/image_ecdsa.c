@@ -37,6 +37,7 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #include "bootutil_priv.h"
 #include "bootutil/fault_injection_hardening.h"
 #include "bootutil/crypto/ecdsa.h"
+#include "bootutil/boot_measure.h"
 
 #if !defined(MCUBOOT_BUILTIN_KEY)
 fih_ret
@@ -55,12 +56,20 @@ bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
     end = pubkey + *bootutil_keys[key_id].len;
     bootutil_ecdsa_init(&ctx);
 
+    BOOT_MEASURE_D_START(BOOT_MEASURE_D_ECDSA_KEY_PARSE);
     rc = bootutil_ecdsa_parse_public_key(&ctx, &pubkey, end);
+    BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_KEY_PARSE);
     if (rc) {
         goto out;
     }
 
+#if defined(MCUBOOT_USE_PSA_CRYPTO)
+    BOOT_MEASURE_D_START(BOOT_MEASURE_D_PSA_VERIFY_HASH);
+#endif
     rc = bootutil_ecdsa_verify(&ctx, pubkey, end-pubkey, hash, hlen, sig, slen);
+#if defined(MCUBOOT_USE_PSA_CRYPTO)
+    BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_PSA_VERIFY_HASH);
+#endif
     fih_rc = fih_ret_encode_zero_equality(rc);
     if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
         FIH_SET(fih_rc, FIH_FAILURE);

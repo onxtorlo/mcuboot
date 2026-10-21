@@ -36,6 +36,7 @@ BOOT_LOG_MODULE_DECLARE(mcuboot);
 #include "bootutil_priv.h"
 #include "bootutil/sign_key.h"
 #include "bootutil/fault_injection_hardening.h"
+#include "bootutil/boot_measure.h"
 
 #define BOOTUTIL_CRYPTO_RSA_SIGN_ENABLED
 #include "bootutil/crypto/rsa.h"
@@ -128,6 +129,7 @@ bootutil_cmp_rsasig(bootutil_rsa_context *ctx, uint8_t *hash, uint32_t hlen,
     uint8_t db_mask[PSS_MASK_LEN];
     uint8_t h2[PSS_HLEN];
     int i;
+    int rc;
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
     /* The caller has already verified that slen == bootutil_rsa_get_len(ctx) */
@@ -141,7 +143,10 @@ bootutil_cmp_rsasig(bootutil_rsa_context *ctx, uint8_t *hash, uint32_t hlen,
     }
 
     /* Apply RSAVP1 to produce em = sig^E mod N using the public key */
-    if (bootutil_rsa_public(ctx, sig, em)) {
+    BOOT_MEASURE_D_START(BOOT_MEASURE_D_RSA_PUBLIC);
+    rc = bootutil_rsa_public(ctx, sig, em);
+    BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_RSA_PUBLIC);
+    if (rc) {
         goto out;
     }
 
@@ -188,7 +193,9 @@ bootutil_cmp_rsasig(bootutil_rsa_context *ctx, uint8_t *hash, uint32_t hlen,
      */
 
     /* Step 7.  let dbMask = MGF(H, emLen - hLen - 1). */
+    BOOT_MEASURE_D_START(BOOT_MEASURE_D_RSA_PSS_MGF1);
     pss_mgf1(db_mask, &em[PSS_HASH_OFFSET]);
+    BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_RSA_PSS_MGF1);
 
     /* Step 8.  let DB = maskedDB xor dbMask.
      * To avoid needing an additional buffer, store the 'db' in the
@@ -223,6 +230,7 @@ bootutil_cmp_rsasig(bootutil_rsa_context *ctx, uint8_t *hash, uint32_t hlen,
     /* Step 12.  Let M' = 0x00 00 00 00 00 00 00 00 || mHash || salt; */
 
     /* Step 13.  Let H' = Hash(M') */
+    BOOT_MEASURE_D_START(BOOT_MEASURE_D_RSA_PSS_HASH);
     bootutil_sha_init(&shactx);
     bootutil_sha_update(&shactx, pss_zeros, 8);
     bootutil_sha_update(&shactx, hash, PSS_HLEN);
@@ -233,6 +241,7 @@ bootutil_cmp_rsasig(bootutil_rsa_context *ctx, uint8_t *hash, uint32_t hlen,
     /* Step 14.  If H = H', output "consistent".  Otherwise, output
      * "inconsistent". */
     FIH_CALL(boot_fih_memequal, fih_rc, h2, &em[PSS_HASH_OFFSET], PSS_HLEN);
+    BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_RSA_PSS_HASH);
 
 out:
     FIH_RET(fih_rc);
@@ -248,7 +257,9 @@ bootutil_cmp_rsasig(bootutil_rsa_context *ctx, uint8_t *hash, uint32_t hlen,
     FIH_DECLARE(fih_rc, FIH_FAILURE);
 
     /* PSA Crypto APIs allow the verification in a single call */
+    BOOT_MEASURE_D_START(BOOT_MEASURE_D_PSA_VERIFY_HASH);
     rc = bootutil_rsassa_pss_verify(ctx, hash, hlen, sig, slen);
+    BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_PSA_VERIFY_HASH);
 
     fih_rc = fih_ret_encode_zero_equality(rc);
     if (FIH_NOT_EQ(fih_rc, FIH_SUCCESS)) {
@@ -278,7 +289,9 @@ bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
     end = cp + *bootutil_keys[key_id].len;
 
     /* The key used for signature verification is a public RSA key */
+    BOOT_MEASURE_D_START(BOOT_MEASURE_D_RSA_KEY_PARSE);
     rc = bootutil_rsa_parse_public_key(&ctx, &cp, end);
+    BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_RSA_KEY_PARSE);
     if (rc || slen != bootutil_rsa_get_len(&ctx)) {
         goto out;
     }

@@ -56,6 +56,7 @@
 #include <tinycrypt/constants.h>
 #include <tinycrypt/ecc.h>
 #include <tinycrypt/ecc_dsa.h>
+#include "tc_measure.h"
 
 #if default_RNG_defined
 static uECC_RNG_Function g_rng_function = &default_CSPRNG;
@@ -212,6 +213,8 @@ int uECC_verify(const uint8_t *public_key, const uint8_t *message_hash,
 	wordcount_t num_words = curve->num_words;
 	wordcount_t num_n_words = BITS_TO_WORDS(curve->num_n_bits);
 
+	BOOT_MEASURE_D_START(BOOT_MEASURE_D_ECDSA_VERIFY);
+	BOOT_MEASURE_D_START(BOOT_MEASURE_D_ECDSA_LOAD);
 	rx[num_n_words - 1] = 0;
 	r[num_n_words - 1] = 0;
 	s[num_n_words - 1] = 0;
@@ -224,23 +227,33 @@ int uECC_verify(const uint8_t *public_key, const uint8_t *message_hash,
 
 	/* r, s must not be 0. */
 	if (uECC_vli_isZero(r, num_words) || uECC_vli_isZero(s, num_words)) {
+		BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_LOAD);
+		BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_VERIFY);
 		return 0;
 	}
 
 	/* r, s must be < n. */
 	if (uECC_vli_cmp_unsafe(curve->n, r, num_n_words) != 1 ||
 	    uECC_vli_cmp_unsafe(curve->n, s, num_n_words) != 1) {
+		BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_LOAD);
+		BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_VERIFY);
 		return 0;
 	}
+	BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_LOAD);
 
 	/* Calculate u1 and u2. */
+	BOOT_MEASURE_D_START(BOOT_MEASURE_D_ECDSA_INV_S);
 	uECC_vli_modInv(z, s, curve->n, num_n_words); /* z = 1/s */
+	BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_INV_S);
+	BOOT_MEASURE_D_START(BOOT_MEASURE_D_ECDSA_U1U2);
 	u1[num_n_words - 1] = 0;
 	bits2int(u1, message_hash, hash_size, curve);
 	uECC_vli_modMult(u1, u1, z, curve->n, num_n_words); /* u1 = e/s */
 	uECC_vli_modMult(u2, r, z, curve->n, num_n_words); /* u2 = r/s */
+	BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_U1U2);
 
 	/* Calculate sum = G + Q. */
+	BOOT_MEASURE_D_START(BOOT_MEASURE_D_ECDSA_G_PLUS_Q);
 	uECC_vli_set(sum, _public, num_words);
 	uECC_vli_set(sum + num_words, _public + num_words, num_words);
 	uECC_vli_set(tx, curve->G, num_words);
@@ -249,8 +262,10 @@ int uECC_verify(const uint8_t *public_key, const uint8_t *message_hash,
 	XYcZ_add(tx, ty, sum, sum + num_words, curve);
 	uECC_vli_modInv(z, z, curve->p, num_words); /* z = 1/z */
 	apply_z(sum, sum + num_words, z, curve);
+	BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_G_PLUS_Q);
 
 	/* Use Shamir's trick to calculate u1*G + u2*Q */
+	BOOT_MEASURE_D_START(BOOT_MEASURE_D_ECDSA_LOOP);
 	points[0] = 0;
 	points[1] = curve->G;
 	points[2] = _public;
@@ -267,20 +282,26 @@ int uECC_verify(const uint8_t *public_key, const uint8_t *message_hash,
 
 	for (i = num_bits - 2; i >= 0; --i) {
 		uECC_word_t index;
+		BOOT_MEASURE_D_START(BOOT_MEASURE_D_ECDSA_LOOP_DBL);
 		curve->double_jacobian(rx, ry, z, curve);
+		BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_LOOP_DBL);
 
 		index = (!!uECC_vli_testBit(u1, i)) | ((!!uECC_vli_testBit(u2, i)) << 1);
 		point = points[index];
 		if (point) {
+			BOOT_MEASURE_D_START(BOOT_MEASURE_D_ECDSA_LOOP_ADD);
 			uECC_vli_set(tx, point, num_words);
 			uECC_vli_set(ty, point + num_words, num_words);
 			apply_z(tx, ty, z, curve);
 			uECC_vli_modSub(tz, rx, tx, curve->p, num_words); /* Z = x2 - x1 */
 			XYcZ_add(tx, ty, rx, ry, curve);
 			uECC_vli_modMult_fast(z, z, tz, curve);
+			BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_LOOP_ADD);
 		}
   	}
+	BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_LOOP);
 
+	BOOT_MEASURE_D_START(BOOT_MEASURE_D_ECDSA_FINAL);
 	uECC_vli_modInv(z, z, curve->p, num_words); /* Z = 1/Z */
 	apply_z(rx, ry, z, curve);
 
@@ -290,6 +311,9 @@ int uECC_verify(const uint8_t *public_key, const uint8_t *message_hash,
 	}
 
 	/* Accept only if v == r. */
-	return (int)(uECC_vli_equal(rx, r, num_words) == 0);
+	i = (uECC_vli_equal(rx, r, num_words) == 0);
+	BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_FINAL);
+	BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_VERIFY);
+	return (int)i;
 }
 

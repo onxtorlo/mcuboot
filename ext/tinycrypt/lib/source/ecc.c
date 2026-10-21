@@ -55,6 +55,7 @@
 #include <tinycrypt/ecc.h>
 #include <tinycrypt/ecc_platform_specific.h>
 #include <string.h>
+#include "tc_measure.h"
 
 /* IMPORTANT: Make sure a cryptographically-secure PRNG is set and the platform
  * has access to enough entropy in order to feed the PRNG regularly. */
@@ -265,6 +266,7 @@ static void uECC_vli_mult(uECC_word_t *result, const uECC_word_t *left,
 	uECC_word_t r2 = 0;
 	wordcount_t i, k;
 
+	BOOT_MEASURE_P_START(BOOT_MEASURE_P_TC_VLI_MULT);
 	/* Compute each digit of result in sequence, maintaining the carries. */
 	for (k = 0; k < num_words; ++k) {
 
@@ -289,6 +291,7 @@ static void uECC_vli_mult(uECC_word_t *result, const uECC_word_t *left,
 		r2 = 0;
 	}
 	result[num_words * 2 - 1] = r0;
+	BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_TC_VLI_MULT);
 }
 
 void uECC_vli_modAdd(uECC_word_t *result, const uECC_word_t *left,
@@ -325,6 +328,7 @@ void uECC_vli_mmod(uECC_word_t *result, uECC_word_t *product,
 	uECC_word_t *v[2] = {tmp, product};
 	uECC_word_t index;
 
+	BOOT_MEASURE_P_START(BOOT_MEASURE_P_TC_MMOD);
 	/* Shift mod so its highest set bit is at the maximum position. */
 	bitcount_t shift = (num_words * 2 * uECC_WORD_BITS) -
 			   uECC_vli_numBits(mod, num_words);
@@ -359,6 +363,7 @@ void uECC_vli_mmod(uECC_word_t *result, uECC_word_t *product,
 		uECC_vli_rshift1(mod_multiple + num_words, num_words);
 	}
 	uECC_vli_set(result, v[index], num_words);
+	BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_TC_MMOD);
 }
 
 void uECC_vli_modMult(uECC_word_t *result, const uECC_word_t *left,
@@ -412,8 +417,10 @@ void uECC_vli_modInv(uECC_word_t *result, const uECC_word_t *input,
 	uECC_word_t u[NUM_ECC_WORDS], v[NUM_ECC_WORDS];
 	cmpresult_t cmpResult;
 
+	BOOT_MEASURE_P_START(BOOT_MEASURE_P_TC_MODINV);
 	if (uECC_vli_isZero(input, num_words)) {
 		uECC_vli_clear(result, num_words);
+		BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_TC_MODINV);
 		return;
 	}
 
@@ -448,6 +455,7 @@ void uECC_vli_modInv(uECC_word_t *result, const uECC_word_t *input,
     		}
   	}
   	uECC_vli_set(result, u, num_words);
+	BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_TC_MODINV);
 }
 
 /* ------ Point operations ------ */
@@ -464,6 +472,7 @@ void double_jacobian_default(uECC_word_t * X1, uECC_word_t * Y1,
 		return;
 	}
 
+	BOOT_MEASURE_P_START(BOOT_MEASURE_P_TC_DOUBLE);
 	uECC_vli_modSquare_fast(t4, Y1, curve);   /* t4 = y1^2 */
 	uECC_vli_modMult_fast(t5, X1, t4, curve); /* t5 = x1*y1^2 = A */
 	uECC_vli_modSquare_fast(t4, t4, curve);   /* t4 = y1^4 */
@@ -497,6 +506,7 @@ void double_jacobian_default(uECC_word_t * X1, uECC_word_t * Y1,
 	uECC_vli_set(X1, Z1, num_words);
 	uECC_vli_set(Z1, Y1, num_words);
 	uECC_vli_set(Y1, t4, num_words);
+	BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_TC_DOUBLE);
 }
 
 void x_side_default(uECC_word_t *result,
@@ -523,6 +533,7 @@ void vli_mmod_fast_secp256r1(unsigned int *result, unsigned int*product)
 	unsigned int tmp[NUM_ECC_WORDS];
 	int carry;
 
+	BOOT_MEASURE_P_START(BOOT_MEASURE_P_TC_MMOD_FAST);
 	/* t */
 	uECC_vli_set(result, product, NUM_ECC_WORDS);
 
@@ -617,6 +628,7 @@ void vli_mmod_fast_secp256r1(unsigned int *result, unsigned int*product)
 			carry -= uECC_vli_sub(result, result, curve_secp256r1.p, NUM_ECC_WORDS);
 		}
 	}
+	BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_TC_MMOD_FAST);
 }
 
 uECC_word_t EccPoint_isZero(const uECC_word_t *point, uECC_Curve curve)
@@ -629,10 +641,12 @@ void apply_z(uECC_word_t * X1, uECC_word_t * Y1, const uECC_word_t * const Z,
 {
 	uECC_word_t t1[NUM_ECC_WORDS];
 
+	BOOT_MEASURE_P_START(BOOT_MEASURE_P_TC_APPLY_Z);
 	uECC_vli_modSquare_fast(t1, Z, curve);    /* z^2 */
 	uECC_vli_modMult_fast(X1, X1, t1, curve); /* x1 * z^2 */
 	uECC_vli_modMult_fast(t1, t1, Z, curve);  /* z^3 */
 	uECC_vli_modMult_fast(Y1, Y1, t1, curve); /* y1 * z^3 */
+	BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_TC_APPLY_Z);
 }
 
 /* P = (x1, y1) => 2P, (x2, y2) => P' */
@@ -666,6 +680,7 @@ void XYcZ_add(uECC_word_t * X1, uECC_word_t * Y1,
 	uECC_word_t t5[NUM_ECC_WORDS];
 	wordcount_t num_words = curve->num_words;
 
+	BOOT_MEASURE_P_START(BOOT_MEASURE_P_TC_XYCZ_ADD);
 	uECC_vli_modSub(t5, X2, X1, curve->p, num_words); /* t5 = x2 - x1 */
 	uECC_vli_modSquare_fast(t5, t5, curve); /* t5 = (x2 - x1)^2 = A */
 	uECC_vli_modMult_fast(X1, X1, t5, curve); /* t1 = x1*A = B */
@@ -682,6 +697,7 @@ void XYcZ_add(uECC_word_t * X1, uECC_word_t * Y1,
 	uECC_vli_modSub(Y2, Y2, Y1, curve->p, num_words); /* t4 = y3 */
 
 	uECC_vli_set(X2, t5, num_words);
+	BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_TC_XYCZ_ADD);
 }
 
 /* Input P = (x1, y1, Z), Q = (x2, y2, Z)

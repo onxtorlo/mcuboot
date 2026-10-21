@@ -1145,6 +1145,23 @@ config BOOT_MEASURE_TIMING
 	  validation failed (hash mismatch, no matching key, bad signature).
 	  The results are printed once, right before jumping to the
 	  application or giving up. When disabled, no code is added.
+
+config BOOT_MEASURE_SIG_DETAIL
+	bool "Measure the steps inside signature verification"
+	depends on BOOT_MEASURE_TIMING
+	help
+	  Also count cycles for each step of the last signature verification
+	  (e.g. for ECDSA: key/signature decoding, inversions, the scalar
+	  multiplication loop). Only a handful of counter reads are added.
+
+config BOOT_MEASURE_SIG_PRIMS
+	bool "Measure arithmetic primitives inside signature verification"
+	depends on BOOT_MEASURE_TIMING
+	help
+	  Count calls and cycles of the big-number and point primitives used by
+	  the last signature verification. They run thousands of times, so this
+	  makes the verification measurably slower; compare the "sig" stage with
+	  a build without it to see by how much.
 	  With INIT_STACKS and THREAD_STACK_INFO also enabled, the peak
 	  main thread stack use is printed as well.
 

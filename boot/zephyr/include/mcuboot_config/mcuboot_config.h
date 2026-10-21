@@ -247,6 +247,16 @@
 
 #ifdef CONFIG_BOOT_MEASURE_TIMING
 #define MCUBOOT_MEASURE_TIMING
+/* DWT->CYCCNT, enabled by boot_measure_init() */
+#define MCUBOOT_MEASURE_CYCLES() (*(volatile uint32_t *)0xE0001004UL)
+#endif
+
+#ifdef CONFIG_BOOT_MEASURE_SIG_DETAIL
+#define MCUBOOT_MEASURE_SIG_DETAIL
+#endif
+
+#ifdef CONFIG_BOOT_MEASURE_SIG_PRIMS
+#define MCUBOOT_MEASURE_SIG_PRIMS
 #endif
 
 #ifdef CONFIG_MCUBOOT_UUID_VID

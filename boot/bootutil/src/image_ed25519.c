@@ -24,6 +24,7 @@
 #include "bootutil/bootutil_log.h"
 #include "bootutil/crypto/sha.h"
 #include "bootutil_priv.h"
+#include "bootutil/boot_measure.h"
 
 BOOT_LOG_MODULE_DECLARE(mcuboot);
 
@@ -117,7 +118,9 @@ bootutil_verify_sig(uint8_t *msg, uint32_t mlen, uint8_t *sig, size_t slen,
     end = pubkey + *bootutil_keys[key_id].len;
 
 #if !defined(MCUBOOT_KEY_IMPORT_BYPASS_ASN)
+    BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_KEY_PARSE);
     rc = bootutil_import_key(&pubkey, end);
+    BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_KEY_PARSE);
     if (rc) {
         BOOT_LOG_DBG("bootutil_verify_sig: import key failed %d", rc);
         FIH_SET(fih_rc, FIH_FAILURE);

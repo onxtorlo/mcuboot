@@ -41,6 +41,7 @@
 #if defined(MCUBOOT_USE_TINYCRYPT)
     #include <tinycrypt/ecc_dsa.h>
     #include <tinycrypt/constants.h>
+    #include "bootutil/boot_measure.h"
 #endif /* MCUBOOT_USE_TINYCRYPT */
 
 #if defined(MCUBOOT_USE_CC310)
@@ -205,7 +206,9 @@ static inline int bootutil_ecdsa_verify(bootutil_ecdsa_context *ctx,
     (void)hash_len;
 
     uint8_t signature[2 * NUM_ECC_BYTES];
+    BOOT_MEASURE_D_START(BOOT_MEASURE_D_ECDSA_SIG_DECODE);
     rc = bootutil_decode_sig(signature, sig, sig + sig_len);
+    BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ECDSA_SIG_DECODE);
     if (rc) {
         return -1;
     }

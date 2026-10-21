@@ -28,6 +28,7 @@
 // The field functions are shared by Ed25519 and X25519 where possible.
 
 #include <string.h>
+#include "fiat_measure.h"
 #include <stdint.h>
 
 #include <bootutil/bootutil_public.h>
@@ -183,7 +184,9 @@ static void fe_mul_impl(fe_limb_t out[FE_NUM_LIMBS],
                         const fe_limb_t in2[FE_NUM_LIMBS]) {
   assert_fe_loose(in1);
   assert_fe_loose(in2);
+  BOOT_MEASURE_P_START(BOOT_MEASURE_P_FIAT_MUL);
   fiat_25519_carry_mul(out, in1, in2);
+  BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_FIAT_MUL);
   assert_fe(out);
 }
 
@@ -209,13 +212,17 @@ static void fe_mul_tll(fe *h, const fe_loose *f, const fe_loose *g) {
 
 static void fe_sq_tl(fe *h, const fe_loose *f) {
   assert_fe_loose(f->v);
+  BOOT_MEASURE_P_START(BOOT_MEASURE_P_FIAT_SQ);
   fiat_25519_carry_square(h->v, f->v);
+  BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_FIAT_SQ);
   assert_fe(h->v);
 }
 
 static void fe_sq_tt(fe *h, const fe *f) {
   assert_fe_loose(f->v);
+  BOOT_MEASURE_P_START(BOOT_MEASURE_P_FIAT_SQ);
   fiat_25519_carry_square(h->v, f->v);
+  BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_FIAT_SQ);
   assert_fe(h->v);
 }
 
@@ -244,6 +251,7 @@ static void fe_loose_invert(fe *out, const fe_loose *z) {
   fe t3;
   int i;
 
+  BOOT_MEASURE_P_START(BOOT_MEASURE_P_FIAT_INV);
   fe_sq_tl(&t0, z);
   fe_sq_tt(&t1, &t0);
   for (i = 1; i < 2; ++i) {
@@ -293,6 +301,7 @@ static void fe_loose_invert(fe *out, const fe_loose *z) {
     fe_sq_tt(&t1, &t1);
   }
   fe_mul_ttt(out, &t1, &t0);
+  BOOT_MEASURE_P_STOP(BOOT_MEASURE_P_FIAT_INV);
 }
 
 static void fe_invert(fe *out, const fe *z) {
@@ -641,6 +650,7 @@ static void ge_double_scalarmult_vartime(ge_p2 *r, const uint8_t *a,
   ge_p3 A2;
   int i;
 
+  BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_SMUL_PRE);
   slide(aslide, a);
   slide(bslide, b);
 
@@ -668,7 +678,9 @@ static void ge_double_scalarmult_vartime(ge_p2 *r, const uint8_t *a,
   x25519_ge_add(&t, &A2, &Ai[6]);
   x25519_ge_p1p1_to_p3(&u, &t);
   x25519_ge_p3_to_cached(&Ai[7], &u);
+  BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_SMUL_PRE);
 
+  BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_SMUL_LOOP);
   ge_p2_0(r);
 
   for (i = 255; i >= 0; --i) {
@@ -678,26 +690,37 @@ static void ge_double_scalarmult_vartime(ge_p2 *r, const uint8_t *a,
   }
 
   for (; i >= 0; --i) {
+    BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_SMUL_DBL);
     ge_p2_dbl(&t, r);
+    BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_SMUL_DBL);
 
     if (aslide[i] > 0) {
+      BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_SMUL_ADD_A);
       x25519_ge_p1p1_to_p3(&u, &t);
       x25519_ge_add(&t, &u, &Ai[aslide[i] / 2]);
+      BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_SMUL_ADD_A);
     } else if (aslide[i] < 0) {
+      BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_SMUL_ADD_A);
       x25519_ge_p1p1_to_p3(&u, &t);
       x25519_ge_sub(&t, &u, &Ai[(-aslide[i]) / 2]);
+      BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_SMUL_ADD_A);
     }
 
     if (bslide[i] > 0) {
+      BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_SMUL_ADD_B);
       x25519_ge_p1p1_to_p3(&u, &t);
       ge_madd(&t, &u, &Bi[bslide[i] / 2]);
+      BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_SMUL_ADD_B);
     } else if (bslide[i] < 0) {
+      BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_SMUL_ADD_B);
       x25519_ge_p1p1_to_p3(&u, &t);
       ge_msub(&t, &u, &Bi[(-bslide[i]) / 2]);
+      BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_SMUL_ADD_B);
     }
 
     x25519_ge_p1p1_to_p2(r, &t);
   }
+  BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_SMUL_LOOP);
 }
 
 // int64_lshift21 returns |a << 21| but is defined when shifting bits into the
@@ -1049,11 +1072,14 @@ void x25519_sc_reduce(uint8_t s[64]) {
   s[31] = s11 >> 17;
 }
 
-int ED25519_verify(const uint8_t *message, size_t message_len,
-                   const uint8_t signature[64], const uint8_t public_key[32]) {
+static int ed25519_verify_impl(const uint8_t *message, size_t message_len,
+                               const uint8_t signature[64],
+                               const uint8_t public_key[32]) {
   ge_p3 A;
+  BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_DECOMPRESS);
   if ((signature[63] & 224) != 0 ||
       !x25519_ge_frombytes_vartime(&A, public_key)) {
+    BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_DECOMPRESS);
     return 0;
   }
 
@@ -1062,6 +1088,7 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
   fe_carry(&A.X, &t);
   fe_neg(&t, &A.T);
   fe_carry(&A.T, &t);
+  BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_DECOMPRESS);
 
   uint8_t pkcopy[32];
   memcpy(pkcopy, public_key, 32);
@@ -1093,6 +1120,7 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
     }
   }
 
+  BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_SHA512);
 #if defined(MCUBOOT_USE_MBED_TLS)
 
   mbedtls_sha512_context ctx;
@@ -1136,15 +1164,35 @@ int ED25519_verify(const uint8_t *message, size_t message_len,
 
 #endif
 
+  BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_SHA512);
+
+  BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_SC_REDUCE);
   x25519_sc_reduce(h);
+  BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_SC_REDUCE);
 
   ge_p2 R;
+  BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_SMUL);
   ge_double_scalarmult_vartime(&R, h, &A, scopy.u8);
+  BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_SMUL);
 
   uint8_t rcheck[32];
+  int ok;
+  BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_ENCODE);
   x25519_ge_tobytes(rcheck, &R);
+  ok = CRYPTO_memcmp(rcheck, rcopy, sizeof(rcheck)) == 0;
+  BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_ENCODE);
 
-  return CRYPTO_memcmp(rcheck, rcopy, sizeof(rcheck)) == 0;
+  return ok;
+}
+
+int ED25519_verify(const uint8_t *message, size_t message_len,
+                   const uint8_t signature[64], const uint8_t public_key[32]) {
+  int ok;
+
+  BOOT_MEASURE_D_START(BOOT_MEASURE_D_ED_VERIFY);
+  ok = ed25519_verify_impl(message, message_len, signature, public_key);
+  BOOT_MEASURE_D_STOP(BOOT_MEASURE_D_ED_VERIFY);
+  return ok;
 }
 
 static void fe_cswap(fe *f, fe *g, fe_limb_t b) {
